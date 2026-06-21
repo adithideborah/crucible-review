@@ -1,0 +1,23 @@
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+
+# Streamlit
+.streamlit/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Generated files
+*.pdf
