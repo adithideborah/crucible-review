@@ -1,4 +1,4 @@
-# The Crucible Review
+# ⚖️ The Crucible Review
 
 > **Ideas strengthened through structured challenge.**
 
