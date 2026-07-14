@@ -1,14 +1,38 @@
 import os
+
+import streamlit as st
 from dotenv import load_dotenv
 from anthropic import Anthropic
 
-from prompts import CLARIFIER_PROMPT, SKEPTIC_PROMPT, METHODOLOGIST_PROMPT, SYNTHESIZER_PROMPT
+from prompts import (
+    CLARIFIER_PROMPT,
+    SKEPTIC_PROMPT,
+    METHODOLOGIST_PROMPT,
+    SYNTHESIZER_PROMPT,
+)
 
 load_dotenv()
 
-client = Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY")
-)
+
+def get_anthropic_api_key() -> str:
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+
+    if not api_key:
+        try:
+            api_key = st.secrets["ANTHROPIC_API_KEY"]
+        except Exception:
+            api_key = None
+
+    if not api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is missing. Add it to your local .env "
+            "or Streamlit Community Cloud secrets."
+        )
+
+    return str(api_key)
+
+
+client = Anthropic(api_key=get_anthropic_api_key())
 
 
 def run_clarifier_agent(user_idea: str) -> str:
