@@ -21,3 +21,6 @@ venv/
 
 # Generated files
 *.pdf
+
+# Test Cases
+test_cases.txt

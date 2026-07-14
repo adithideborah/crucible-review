@@ -22,7 +22,7 @@ def run_clarifier_agent(user_idea: str) -> str:
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1100,
+        max_tokens=2500,
         system=CLARIFIER_PROMPT,
         messages=[
             {
@@ -43,7 +43,7 @@ def run_skeptic_agent(user_idea: str, clarifier_output: str) -> str:
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1100,
+        max_tokens=2500,
         system=SKEPTIC_PROMPT,
         messages=[
             {
@@ -75,7 +75,7 @@ def run_methodologist_agent(
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1100,
+        max_tokens=2500,
         system=METHODOLOGIST_PROMPT,
         messages=[
             {
@@ -111,7 +111,7 @@ def run_synthesizer_agent(
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1500,
+        max_tokens=2500,
         system=SYNTHESIZER_PROMPT,
         messages=[
             {

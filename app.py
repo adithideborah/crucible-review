@@ -1,5 +1,7 @@
 from pdf_generator import build_pdf
 import json
+import html
+import textwrap
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -22,6 +24,118 @@ def extract_json(text: str):
 
     obj, _ = decoder.raw_decode(text[start:])
     return obj
+
+
+def safe_text(value, fallback=""):
+    if value is None:
+        value = fallback
+    return html.escape(str(value))
+
+
+def render_html(html_content: str):
+    """Render generated HTML without Markdown interpreting indentation as code."""
+    cleaned_html = textwrap.dedent(html_content).strip()
+    st.markdown(cleaned_html, unsafe_allow_html=True)
+
+
+def count_words(value):
+    return len(str(value or "").split())
+
+
+def calculate_crucible_scores(brief):
+    risks = brief.get("risks", []) or []
+    evidence = brief.get("evidence_needed", []) or []
+    minimum_test = brief.get("minimum_test", {}) or {}
+    hypothesis_words = count_words(brief.get("hypothesis"))
+    idea_words = count_words(brief.get("idea_under_test"))
+    summary_words = count_words(brief.get("executive_summary"))
+    clarity = min(100, 35 + min(25, hypothesis_words * 2) + min(20, idea_words) + min(20, summary_words // 2))
+    evidence_specificity = sum(1 for item in evidence if count_words(item) >= 5)
+    evidence_score = min(100, 25 + len(evidence) * 10 + evidence_specificity * 8)
+    high_or_medium_risks = sum(1 for risk in risks if risk.get("severity", "Medium") in ["High", "Medium"])
+    risk_awareness = min(100, 35 + len(risks) * 10 + high_or_medium_risks * 8)
+    test_fields = ["sample", "method", "output", "decision"]
+    completed_test_fields = sum(1 for field in test_fields if count_words(minimum_test.get(field)) >= 3)
+    testability = min(100, 30 + completed_test_fields * 17 + len(evidence) * 3)
+    decision_readiness = round((clarity * 0.25) + (evidence_score * 0.20) + (risk_awareness * 0.20) + (testability * 0.35))
+    overall = round((clarity + evidence_score + risk_awareness + testability + decision_readiness) / 5)
+    return {"overall": overall, "clarity": round(clarity), "evidence": round(evidence_score), "risk_awareness": round(risk_awareness), "testability": round(testability), "decision_readiness": round(decision_readiness)}
+
+
+def score_label(score):
+    if score >= 80:
+        return "Strong Foundation"
+    if score >= 65:
+        return "Promising, Needs Proof"
+    if score >= 50:
+        return "Early, Validate First"
+    return "Premature"
+
+
+def readiness_badge(score):
+    if score >= 80:
+        return "🟢 Ready for Pilot"
+    if score >= 65:
+        return "🟡 Needs Evidence"
+    if score >= 50:
+        return "🟠 Significant Unknowns"
+    return "🔴 Premature"
+
+
+def primary_risk_label(brief):
+    risks = brief.get("risks", []) or []
+    if not risks:
+        return "Not Identified"
+    severity_rank = {"High": 3, "Medium": 2, "Low": 1}
+    top_risk = sorted(risks, key=lambda risk: severity_rank.get(risk.get("severity", "Medium"), 2), reverse=True)[0]
+    return top_risk.get("title", "Review Required")
+
+
+def progress_bar_html(label, score):
+    return f"""
+    <div class="score-row">
+        <div class="score-row-top"><span>{safe_text(label)}</span><strong>{score}</strong></div>
+        <div class="score-track"><div class="score-fill" style="width:{max(0, min(100, score))}%;"></div></div>
+    </div>
+    """
+
+
+def render_executive_dashboard(brief, domain_icons):
+    domain = brief.get("domain", "Other")
+    icon = domain_icons.get(domain, "📌")
+    scores = calculate_crucible_scores(brief)
+    primary_risk = primary_risk_label(brief)
+    score_rows = "".join([
+        progress_bar_html("Clarity", scores["clarity"]),
+        progress_bar_html("Evidence", scores["evidence"]),
+        progress_bar_html("Risk Awareness", scores["risk_awareness"]),
+        progress_bar_html("Testability", scores["testability"]),
+        progress_bar_html("Decision Readiness", scores["decision_readiness"]),
+    ])
+    html_block = f"""
+    <div class="report-shell">
+        <div class="report-kicker">EXECUTIVE REVIEW</div>
+        <div class="report-title-row">
+            <div>
+                <div class="report-title">🔥 The Crucible Review</div>
+                <div class="report-subtitle">Structured challenge brief · Generated just now</div>
+            </div>
+            <div class="score-pill"><span>Crucible Score</span><strong>{scores["overall"]}</strong><em>{safe_text(score_label(scores["overall"]))}</em></div>
+        </div>
+        <div class="executive-card"><div class="section-eyebrow">Executive Assessment</div><p>{safe_text(brief.get("executive_summary", ""))}</p></div>
+        <div class="metric-grid">
+            <div class="metric-card"><span>Domain</span><strong>{icon} {safe_text(domain)}</strong></div>
+            <div class="metric-card"><span>Decision Readiness</span><strong>{safe_text(readiness_badge(scores["decision_readiness"]))}</strong></div>
+            <div class="metric-card"><span>Primary Risk</span><strong>{safe_text(primary_risk)}</strong></div>
+            <div class="metric-card"><span>Evidence Posture</span><strong>{safe_text(score_label(scores["evidence"]))}</strong></div>
+        </div>
+        <div class="dashboard-grid">
+            <div class="hypothesis-card"><div class="section-eyebrow">Idea Under Test</div><p>{safe_text(brief.get("idea_under_test", ""))}</p><div class="hypothesis-divider"></div><div class="section-eyebrow">Working Hypothesis</div><p>{safe_text(brief.get("hypothesis", ""))}</p></div>
+            <div class="score-card"><div class="section-eyebrow">Score Breakdown</div>{score_rows}</div>
+        </div>
+    </div>
+    """
+    st.markdown(html_block, unsafe_allow_html=True)
 
 
 st.set_page_config(
@@ -117,6 +231,51 @@ textarea:focus {
     border-left: 5px solid #F97316;
     margin-bottom: 12px;
 }
+
+
+.report-shell { border: 1px solid #E5E7EB; border-radius: 22px; padding: 34px; background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); box-shadow: 0 18px 45px rgba(8, 43, 99, 0.07); margin: 24px 0 22px 0; }
+.report-kicker, .section-eyebrow { color: #082B63; font-size: 12px; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase; }
+.report-title-row { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-top: 10px; }
+.report-title { color: #071C3A; font-size: 38px; line-height: 1.05; letter-spacing: -1.1px; font-weight: 850; }
+.report-subtitle { color: #64748B; font-size: 15px; margin-top: 10px; }
+.score-pill { min-width: 190px; border: 1px solid #DBEAFE; border-radius: 18px; background: #FFFFFF; padding: 18px 20px; text-align: center; }
+.score-pill span, .metric-card span { display: block; color: #64748B; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.score-pill strong { display: block; color: #082B63; font-size: 48px; line-height: 1; margin-top: 7px; }
+.score-pill em { display: block; color: #334155; font-size: 13px; font-style: normal; font-weight: 800; margin-top: 7px; }
+.executive-card, .hypothesis-card, .score-card, .modern-section, .verdict-card { border: 1px solid #E5E7EB; border-radius: 18px; background: #FFFFFF; padding: 24px; }
+.executive-card { margin-top: 26px; border-left: 6px solid #082B63; }
+.executive-card p, .hypothesis-card p, .verdict-card p { color: #1F2937; font-size: 17px; line-height: 1.68; margin: 10px 0 0 0; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.metric-card { border: 1px solid #E5E7EB; border-radius: 16px; background: #FFFFFF; padding: 18px; }
+.metric-card strong { display: block; color: #071C3A; font-size: 17px; line-height: 1.25; margin-top: 8px; }
+.dashboard-grid { display: grid; grid-template-columns: 1.35fr 0.85fr; gap: 18px; margin-top: 18px; }
+.hypothesis-divider { border-top: 1px solid #E5E7EB; margin: 20px 0; }
+.score-row { margin-top: 15px; }
+.score-row-top { display: flex; justify-content: space-between; color: #334155; font-size: 14px; font-weight: 800; margin-bottom: 7px; }
+.score-track { height: 9px; border-radius: 999px; background: #E5E7EB; overflow: hidden; }
+.score-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #082B63, #F97316); }
+.modern-section { margin-bottom: 18px; }
+.modern-section-title { font-size: 26px; color: #071C3A; font-weight: 850; letter-spacing: -0.5px; margin: 30px 0 14px 0; }
+.assumption-grid, .challenge-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.assumption-card, .challenge-card { padding: 18px; border-radius: 16px; background-color: #FFFFFF; margin-bottom: 0; border: 1px solid #E5E7EB; border-left: 5px solid #082B63; }
+.challenge-card { background: #FFF7ED; border-left-color: #F97316; }
+.card-number { color: #64748B; font-size: 12px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
+.card-heading { color: #071C3A; font-weight: 850; font-size: 17px; margin-bottom: 10px; }
+.card-body { color: #334155; font-size: 14.5px; line-height: 1.6; }
+.risk-card { border-radius: 16px; padding: 18px; margin-bottom: 12px; border: 1px solid #E5E7EB; background: #FFFFFF; }
+.risk-badge { display: inline-block; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 850; margin-bottom: 10px; }
+.badge-high { background: #FEE2E2; color: #991B1B; }
+.badge-medium { background: #FEF3C7; color: #92400E; }
+.badge-low { background: #DCFCE7; color: #166534; }
+.evidence-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.evidence-item { padding: 14px; border: 1px solid #E5E7EB; border-radius: 14px; background: #F8FAFC; color: #1F2937; font-size: 14.5px; line-height: 1.5; }
+.investigation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.protocol-card { padding: 16px; border-radius: 14px; background: #F8FAFC; border: 1px solid #E5E7EB; }
+.protocol-card strong { display: block; color: #082B63; font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+.protocol-card span { color: #1F2937; font-size: 14.5px; line-height: 1.5; }
+.verdict-card { border-left: 6px solid #F97316; margin: 24px 0; }
+@media (max-width: 900px) { .report-title-row, .dashboard-grid { grid-template-columns: 1fr; display: grid; } .metric-grid, .assumption-grid, .challenge-grid, .evidence-list, .investigation-grid { grid-template-columns: 1fr; } }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -523,131 +682,195 @@ if st.session_state.brief:
         "Other": "📌",
     }
 
-    severity_colors = {
-        "High": "#FEE2E2",
-        "Medium": "#FEF3C7",
-        "Low": "#DCFCE7",
-    }
-
-    severity_icons = {
-        "High": "🟥",
-        "Medium": "🟧",
-        "Low": "🟨",
-    }
+    severity_class = {"High": "badge-high", "Medium": "badge-medium", "Low": "badge-low"}
 
     st.markdown("---")
-    st.markdown("## 📌 Crucible Brief")
+    render_executive_dashboard(brief, domain_icons)
 
-    st.markdown("### 📄 Executive Summary")
+    st.download_button(label="📄 Download Full Report", data=st.session_state.pdf_data, file_name="crucible_brief.pdf", mime="application/pdf")
+
+    assumption_cards = []
+    for i, item in enumerate(brief.get("assumptions", []), start=1):
+        assumption_cards.append(
+            textwrap.dedent(
+                f"""
+                <div class="assumption-card">
+                    <div class="card-number">Assumption {i}</div>
+                    <div class="card-heading">{safe_text(item.get("title", ""))}</div>
+                    <div class="card-body">
+                        <strong>Why it matters:</strong> {safe_text(item.get("why", ""))}
+                    </div>
+                    <div class="card-body" style="margin-top:8px;">
+                        <strong>How to test it:</strong> {safe_text(item.get("test", ""))}
+                    </div>
+                </div>
+                """
+            ).strip()
+        )
+
+    assumptions_html = "\n".join(assumption_cards)
     st.markdown(
-        f"""
-        <div class="result-card">
-            <b>{brief.get('executive_summary', '')}</b>
-        </div>
-        """,
+        '<div class="modern-section-title">🧭 Assumption Map</div>',
         unsafe_allow_html=True,
     )
+    render_html(
+        f"""
+        <div class="assumption-grid">
+            {assumptions_html}
+        </div>
+        """
+    )
 
-    domain = brief.get("domain", "Other")
-    icon = domain_icons.get(domain, "📌")
-
-    st.markdown(f"### {icon} {domain}")
-    st.info(brief.get("idea_under_test", ""))
-
-    st.success(f"**Working Hypothesis:** {brief.get('hypothesis', '')}")
-
-    st.markdown("### 🧭 Assumption Map")
-
-    for item in brief.get("assumptions", []):
-        st.markdown(
-            f"""
-            <div class="assumption-card">
-                <b>{item.get("title", "")}</b><br>
-                <span style="color:#4B5563;">Why: {item.get("why", "")}</span><br>
-                <span style="color:#1F2937;">Test: {item.get("test", "")}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("### 🚦 Risk Radar")
-
+    risk_cards = []
     for risk in brief.get("risks", []):
         severity = risk.get("severity", "Medium")
-        color = severity_colors.get(severity, "#F3F4F6")
-        icon = severity_icons.get(severity, "⚠️")
-
-        st.markdown(
-            f"""
-            <div style="
-                padding: 15px;
-                border-radius: 14px;
-                background-color: {color};
-                margin-bottom: 12px;
-            ">
-                <b>{icon} {severity} Risk: {risk.get("title", "")}</b><br>
-                <span>{risk.get("why", "")}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        badge_class = severity_class.get(severity, "badge-medium")
+        risk_cards.append(
+            textwrap.dedent(
+                f"""
+                <div class="risk-card">
+                    <div class="risk-badge {badge_class}">{safe_text(severity)} Risk</div>
+                    <div class="card-heading">{safe_text(risk.get("title", ""))}</div>
+                    <div class="card-body">{safe_text(risk.get("why", ""))}</div>
+                </div>
+                """
+            ).strip()
         )
 
-    st.markdown("### 🧾 Evidence Needed")
+    risks_html = "\n".join(risk_cards)
+    st.markdown(
+        '<div class="modern-section-title">🚦 Risk Radar</div>',
+        unsafe_allow_html=True,
+    )
+    render_html(
+        f"""
+        <div class="modern-section">
+            {risks_html}
+        </div>
+        """
+    )
 
-    evidence_items = brief.get("evidence_needed", [])
-    cols = st.columns(2)
+    evidence_items = [
+        f'<div class="evidence-item">☐ {safe_text(evidence)}</div>'
+        for evidence in brief.get("evidence_needed", [])
+    ]
+    evidence_html = "\n".join(evidence_items)
+    st.markdown(
+        '<div class="modern-section-title">🧾 Critical Evidence</div>',
+        unsafe_allow_html=True,
+    )
+    render_html(
+        f"""
+        <div class="modern-section">
+            <div class="evidence-list">
+                {evidence_html}
+            </div>
+        </div>
+        """
+    )
 
-    for i, evidence in enumerate(evidence_items):
-        with cols[i % 2]:
-            st.markdown(f"✅ {evidence}")
+    test = brief.get("minimum_test", {}) or {}
+    protocol_items = [
+        ("Sample", test.get("sample", "")),
+        ("Method", test.get("method", "")),
+        ("Output", test.get("output", "")),
+        ("Decision", test.get("decision", "")),
+    ]
+    protocol_html = "\n".join(
+        f"""
+        <div class="protocol-card">
+            <strong>{safe_text(label)}</strong>
+            <span>{safe_text(value)}</span>
+        </div>
+        """.strip()
+        for label, value in protocol_items
+    )
+    st.markdown(
+        '<div class="modern-section-title">🧪 Minimum Viable Investigation</div>',
+        unsafe_allow_html=True,
+    )
+    render_html(
+        f"""
+        <div class="modern-section">
+            <div class="investigation-grid">
+                {protocol_html}
+            </div>
+        </div>
+        """
+    )
 
-    st.markdown("### 🧪 Minimum Viable Investigation")
+    move_items = [
+        f'<div class="evidence-item"><strong>{i}.</strong> {safe_text(move)}</div>'
+        for i, move in enumerate(brief.get("next_moves", []), start=1)
+    ]
+    moves_html = "\n".join(move_items)
+    st.markdown(
+        '<div class="modern-section-title">🎯 Recommended Actions</div>',
+        unsafe_allow_html=True,
+    )
+    render_html(
+        f"""
+        <div class="modern-section">
+            <div class="evidence-list">
+                {moves_html}
+            </div>
+        </div>
+        """
+    )
 
-    test = brief.get("minimum_test", {})
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown(f"**Sample**  \n{test.get('sample', '')}")
-        st.markdown(f"**Output**  \n{test.get('output', '')}")
-
-    with col2:
-        st.markdown(f"**Method**  \n{test.get('method', '')}")
-        st.markdown(f"**Decision**  \n{test.get('decision', '')}")
-
-    st.markdown("### 🎯 Next 3 Moves")
-
-    for i, move in enumerate(brief.get("next_moves", []), start=1):
-        st.markdown(f"**{i}.** {move}")
-
-    st.markdown("### ⚔️ Challenge Cards")
-
-    for i, question in enumerate(brief.get("mentor_questions", []), start=1):
-        st.markdown(
+    challenge_cards = [
+        textwrap.dedent(
             f"""
             <div class="challenge-card">
-                <b>Challenge #{i}</b><br><br>
-                {question}
+                <div class="card-number">Challenge {i}</div>
+                <div class="card-body">{safe_text(question)}</div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            """
+        ).strip()
+        for i, question in enumerate(brief.get("mentor_questions", []), start=1)
+    ]
+    questions_html = "\n".join(challenge_cards)
+    st.markdown(
+        '<div class="modern-section-title">⚔️ Challenge Cards</div>',
+        unsafe_allow_html=True,
+    )
+    render_html(
+        f"""
+        <div class="challenge-grid">
+            {questions_html}
+        </div>
+        """
+    )
 
-    st.download_button(
-        label="📄 Download PDF",
-        data=st.session_state.pdf_data,
-        file_name="crucible_brief.pdf",
-        mime="application/pdf",
+    scores = calculate_crucible_scores(brief)
+
+    recommendation = (
+        brief.get("recommendation")
+        or brief.get("verdict")
+        or brief.get("final_recommendation")
+    )
+
+    verdict = recommendation or (
+        f"{score_label(scores['overall'])}. "
+        "Proceed by tightening the evidence base before making a "
+        "high-confidence commitment. The next best step is a small, "
+        "measurable test that can disconfirm the working hypothesis."
+    )
+
+    render_html(
+        f"""
+        <div class="verdict-card">
+            <div class="section-eyebrow">The Crucible Verdict</div>
+            <p>{safe_text(verdict)}</p>
+        </div>
+        """
     )
 
     st.markdown("---")
     st.markdown("### Behind the Analysis")
-
     with st.expander("🔦 Clarifier"):
         st.markdown(st.session_state.clarifier_output)
-
     with st.expander("🚩 Skeptic"):
         st.markdown(st.session_state.skeptic_output)
-
     with st.expander("📐 Methodologist"):
         st.markdown(st.session_state.methodologist_output)
