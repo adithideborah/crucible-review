@@ -6,7 +6,7 @@ The Crucible Review is an AI-powered adversarial thinking partner that helps use
 
 Instead of generating a single answer, it orchestrates four specialized AI reviewers to clarify assumptions, challenge weak reasoning, evaluate methodology, and synthesize actionable recommendations into an executive-ready decision brief.
 
-The goal is not to replace human judgment... it is to sharpen it!
+The goal is not to replace human judgment.. it is to sharpen it!
 
 ---
 
@@ -20,7 +20,7 @@ No installation required.
 
 ## 📸 Demo
 
-![Executive Dashboard](images/dashboard.png)
+![Executive Dashboard](images/dashboard.PNG)
 
 > *The Crucible Review transforms a single idea into a structured executive decision brief.*
 
@@ -110,7 +110,7 @@ Integrates insights from all reviewers into a structured executive report with a
 
 # 📄 Example Executive Report
 
-![Generated Review](images/report.png)
+![Generated Review](images/report.PNG)
 
 The final report includes:
 
@@ -127,7 +127,7 @@ The final report includes:
 
 # 📑 Executive PDF Export
 
-![PDF Export](images/pdf.png)
+![PDF Export](images/pdf.PNG)
 
 Every review can be exported as a professionally formatted PDF suitable for sharing, documentation, or future reference.
 
@@ -176,9 +176,9 @@ crucible-review/
 ├── requirements.txt
 ├── README.md
 ├── images/
-│   ├── dashboard.png
-│   ├── report.png
-│   └── pdf.png
+│   ├── dashboard.PNG
+│   ├── report.PNG
+│   └── pdf.PNG
 ├── .gitignore
 └── .env
 ```
